@@ -135,14 +135,15 @@
     <p>© 2026 MyWebsite. All rights reserved.</p>
   </footer>
 
-  <script type="text/javascript">
-    if ('serviceWorker' in navigator){
-      navigator.serviceWorker.register('/sw.js')
-        .then (()=>console.log("service worker registerd"))
-        .catch ((error)=>console.log("service worker registerd",error));
-}
-  </script>
+  <script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then(() => console.log("Service Worker registered"))
+      .catch((error) => console.error("Service Worker failed:", error));
+  }
+</script>
+
 
 </body>
 </html>
-
