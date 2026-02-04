@@ -1,15 +1,8 @@
 {
-  "name":"ChatWW"
-  "shortname":"Chatww"
-  "start_url":"/"
-  "display":"standalone"
-  "background_color":"#020617"
-  "theme_color":"#22c55e"
-  "icons":[
-    {
-    "src":"cww-logo"
-    "sizes":"240x240"
-    "type":"image/png"
-    }
-  ]
+  "name": "ChatWW",
+  "short_name": "ChatWW",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#22c55e"
 }
