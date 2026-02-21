@@ -1,40 +1,759 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>My First PWA</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#000000">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="description" content="A minimal focus timer that works offline" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Focus" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <title>Focus Timer</title>
 
   <style>
-    body {
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: white;
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&display=swap');
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #222222;
+      --accent: #ff4500;
+      --accent-dim: rgba(255,69,0,0.15);
+      --accent-glow: rgba(255,69,0,0.4);
+      --text: #e8e8e8;
+      --muted: #555555;
+      --work-color: #ff4500;
+      --break-color: #00b4d8;
+      --radius: 4px;
     }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,69,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,69,0,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+    }
+
+    .header h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(28px, 6vw, 38px);
+      letter-spacing: 6px;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .header .subtitle {
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* Mode tabs */
+    .mode-tabs {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px 6px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .tab-btn:not(:last-child) {
+      border-right: 1px solid var(--border);
+    }
+
+    .tab-btn.active[data-mode="work"] {
+      background: var(--accent-dim);
+      color: var(--work-color);
+    }
+
+    .tab-btn.active[data-mode="short"] {
+      background: rgba(0,180,216,0.12);
+      color: var(--break-color);
+    }
+
+    .tab-btn.active[data-mode="long"] {
+      background: rgba(0,180,216,0.12);
+      color: var(--break-color);
+    }
+
+    /* Timer ring */
+    .timer-container {
+      position: relative;
+      width: min(280px, 70vw);
+      height: min(280px, 70vw);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ring-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: 3;
+    }
+
+    .ring-progress {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 3;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.4s ease;
+    }
+
+    .ring-progress.break-mode {
+      stroke: var(--break-color);
+    }
+
+    /* Pulsing ring when running */
+    @keyframes pulse-glow {
+      0%, 100% { filter: drop-shadow(0 0 4px var(--accent-glow)); }
+      50% { filter: drop-shadow(0 0 12px var(--accent-glow)); }
+    }
+
+    .ring-svg.running .ring-progress {
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    .ring-svg.running .ring-progress.break-mode {
+      animation: none;
+      filter: drop-shadow(0 0 8px rgba(0,180,216,0.5));
+    }
+
+    .timer-display {
+      text-align: center;
+      z-index: 2;
+    }
+
+    .timer-time {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(56px, 15vw, 76px);
+      line-height: 1;
+      letter-spacing: 4px;
+      color: var(--text);
+      transition: color 0.4s ease;
+    }
+
+    .timer-time.break-mode {
+      color: var(--break-color);
+    }
+
+    .timer-label {
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    /* Session dots */
+    .sessions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .session-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      border: 1px solid var(--muted);
+      transition: all 0.3s ease;
+    }
+
+    .session-dot.done {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn {
+      border: none;
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border-radius: var(--radius);
+      transition: all 0.15s ease;
+    }
+
+    .btn-main {
+      padding: 14px 48px;
+      font-size: 14px;
+      background: var(--accent);
+      color: #000;
+      font-weight: bold;
+    }
+
+    .btn-main:hover {
+      background: #ff5a1f;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .btn-main:active { transform: translateY(0); }
+
+    .btn-main.break-active {
+      background: var(--break-color);
+      box-shadow: 0 4px 16px rgba(0,180,216,0.4);
+    }
+
+    .btn-icon {
+      padding: 12px 14px;
+      font-size: 16px;
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-icon:hover {
+      border-color: var(--muted);
+      color: var(--text);
+    }
+
+    /* Stats bar */
+    .stats {
+      display: flex;
+      gap: 0;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .stat {
+      flex: 1;
+      padding: 12px 8px;
+      text-align: center;
+    }
+
+    .stat:not(:last-child) {
+      border-right: 1px solid var(--border);
+    }
+
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      color: var(--accent);
+      letter-spacing: 2px;
+    }
+
+    .stat-label {
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* Install banner */
+    #install-banner {
+      display: none;
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #install-banner.visible { display: flex; }
+
+    #install-banner span {
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    #install-btn {
+      padding: 7px 14px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    #dismiss-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 12px 20px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text);
+      border-radius: var(--radius);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      white-space: nowrap;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.break-toast { border-left-color: var(--break-color); }
+
+    /* Offline indicator */
+    .offline-badge {
+      display: none;
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: #333;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: 2px;
+      padding: 5px 10px;
+      border-radius: var(--radius);
+      text-transform: uppercase;
+    }
+
+    .offline-badge.visible { display: block; }
   </style>
 </head>
 <body>
 
-  <h1>Hello PWA -bla bla🚀</h1>
-  
+<div class="app">
 
-  <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then(() => console.log('Service Worker Registered'))
-      .catch(err => console.log('SW Error', err));
+  <!-- Header -->
+  <div class="header">
+    <h1>Focus</h1>
+    <div class="subtitle">Pomodoro Timer</div>
+  </div>
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs" role="tablist">
+    <button class="tab-btn active" data-mode="work" role="tab" onclick="setMode('work')">Work · 25m</button>
+    <button class="tab-btn" data-mode="short" role="tab" onclick="setMode('short')">Short · 5m</button>
+    <button class="tab-btn" data-mode="long" role="tab" onclick="setMode('long')">Long · 15m</button>
+  </div>
+
+  <!-- Timer ring -->
+  <div class="timer-container">
+    <svg class="ring-svg" id="ringSvg" viewBox="0 0 100 100">
+      <circle class="ring-bg" cx="50" cy="50" r="46"/>
+      <circle class="ring-progress" id="ringProgress" cx="50" cy="50" r="46"/>
+    </svg>
+    <div class="timer-display">
+      <div class="timer-time" id="timerDisplay">25:00</div>
+      <div class="timer-label" id="timerLabel">ready to focus</div>
+    </div>
+  </div>
+
+  <!-- Session dots -->
+  <div class="sessions" id="sessionDots">
+    <div class="session-dot" data-i="0"></div>
+    <div class="session-dot" data-i="1"></div>
+    <div class="session-dot" data-i="2"></div>
+    <div class="session-dot" data-i="3"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn btn-icon" onclick="resetTimer()" title="Reset">↺</button>
+    <button class="btn btn-main" id="startBtn" onclick="toggleTimer()">Start</button>
+    <button class="btn btn-icon" onclick="skipSession()" title="Skip">⇥</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value" id="statSessions">0</div>
+      <div class="stat-label">Sessions</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="statFocus">0m</div>
+      <div class="stat-label">Focus Time</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="statStreak">0</div>
+      <div class="stat-label">Streak</div>
+    </div>
+  </div>
+
+  <!-- Install Banner -->
+  <div id="install-banner">
+    <span>Install for offline use</span>
+    <button id="install-btn" onclick="installApp()">Install</button>
+    <button id="dismiss-btn" onclick="dismissInstall()">✕</button>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Offline badge -->
+<div class="offline-badge" id="offlineBadge">● Offline</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────
+const MODES = {
+  work:  { label: 'work',         seconds: 25 * 60, isBreak: false },
+  short: { label: 'short break',  seconds:  5 * 60, isBreak: true  },
+  long:  { label: 'long break',   seconds: 15 * 60, isBreak: true  },
+};
+
+// ── State ────────────────────────────────────────────────
+let mode       = 'work';
+let totalSecs  = MODES.work.seconds;
+let remaining  = totalSecs;
+let running    = false;
+let ticker     = null;
+let sessions   = 0;      // completed work sessions today
+let streak     = 0;      // current streak
+let focusMins  = 0;      // focus minutes today
+
+// Load persisted stats
+function loadStats() {
+  try {
+    const s = JSON.parse(localStorage.getItem('focus_stats') || '{}');
+    const today = new Date().toDateString();
+    if (s.date === today) {
+      sessions  = s.sessions  || 0;
+      focusMins = s.focusMins || 0;
+      streak    = s.streak    || 0;
+    } else {
+      streak = s.streak || 0; // streak crosses days
+    }
+  } catch(e) {}
+  renderStats();
+  renderDots();
+}
+
+function saveStats() {
+  localStorage.setItem('focus_stats', JSON.stringify({
+    date: new Date().toDateString(),
+    sessions, focusMins, streak
+  }));
+}
+
+// ── Ring progress ─────────────────────────────────────────
+function updateRing() {
+  const r   = 46;
+  const circ = 2 * Math.PI * r;
+  const progress = remaining / totalSecs;
+  const offset   = circ * (1 - progress);
+  const ring = document.getElementById('ringProgress');
+  ring.style.strokeDasharray  = circ;
+  ring.style.strokeDashoffset = offset;
+}
+
+// ── Display ───────────────────────────────────────────────
+function fmt(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function renderDisplay() {
+  document.getElementById('timerDisplay').textContent = fmt(remaining);
+}
+
+function renderLabel() {
+  const cfg = MODES[mode];
+  const el  = document.getElementById('timerLabel');
+  if (running) {
+    el.textContent = cfg.isBreak ? 'take a breather' : 'deep focus';
+  } else if (remaining < totalSecs && remaining > 0) {
+    el.textContent = 'paused';
+  } else {
+    el.textContent = 'ready to ' + (cfg.isBreak ? 'rest' : 'focus');
   }
+}
+
+function renderBreakMode() {
+  const isBreak = MODES[mode].isBreak;
+  document.getElementById('timerDisplay').classList.toggle('break-mode', isBreak);
+  document.getElementById('ringProgress').classList.toggle('break-mode', isBreak);
+  document.getElementById('startBtn').classList.toggle('break-active', isBreak);
+}
+
+function renderStats() {
+  document.getElementById('statSessions').textContent = sessions;
+  document.getElementById('statFocus').textContent    = focusMins + 'm';
+  document.getElementById('statStreak').textContent   = streak;
+}
+
+function renderDots() {
+  document.querySelectorAll('.session-dot').forEach((dot, i) => {
+    dot.classList.toggle('done', i < (sessions % 4));
+  });
+}
+
+function renderBtn() {
+  document.getElementById('startBtn').textContent = running ? 'Pause' : 'Start';
+}
+
+function renderRingSvg() {
+  document.getElementById('ringSvg').classList.toggle('running', running);
+}
+
+function render() {
+  renderDisplay();
+  renderLabel();
+  renderBtn();
+  updateRing();
+  renderRingSvg();
+}
+
+// ── Mode switching ────────────────────────────────────────
+function setMode(m) {
+  if (running) stopTimer();
+  mode      = m;
+  totalSecs = MODES[m].seconds;
+  remaining = totalSecs;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === m);
+  });
+  renderBreakMode();
+  render();
+}
+
+// ── Timer ─────────────────────────────────────────────────
+function startTimer() {
+  running = true;
+  ticker  = setInterval(tick, 1000);
+  render();
+}
+
+function stopTimer() {
+  running = false;
+  clearInterval(ticker);
+  ticker  = null;
+  render();
+}
+
+function toggleTimer() {
+  running ? stopTimer() : startTimer();
+}
+
+function resetTimer() {
+  stopTimer();
+  remaining = totalSecs;
+  render();
+}
+
+function tick() {
+  remaining--;
+  if (remaining <= 0) {
+    remaining = 0;
+    render();
+    sessionComplete();
+  } else {
+    render();
+  }
+}
+
+function sessionComplete() {
+  stopTimer();
+  const wasWork = !MODES[mode].isBreak;
+
+  if (wasWork) {
+    sessions++;
+    focusMins += Math.round(totalSecs / 60);
+    streak++;
+    renderDots();
+    renderStats();
+    saveStats();
+    showToast('Session complete! Take a break.', false);
+    // Auto-switch to break
+    setTimeout(() => setMode(sessions % 4 === 0 ? 'long' : 'short'), 600);
+  } else {
+    showToast('Break over. Ready to focus?', true);
+    setTimeout(() => setMode('work'), 600);
+  }
+
+  // Vibrate if supported
+  if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+  
+  // Audio beep
+  playBeep(wasWork);
+}
+
+function skipSession() {
+  sessionComplete();
+}
+
+// ── Audio ─────────────────────────────────────────────────
+function playBeep(isWork) {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = isWork ? 880 : 440;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.8);
+  } catch(e) {}
+}
+
+// ── Toast ─────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, isBreakEnd) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('break-toast', isBreakEnd);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── PWA Install ───────────────────────────────────────────
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').classList.add('visible');
+});
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+      deferredPrompt = null;
+      dismissInstall();
+    });
+  }
+}
+
+function dismissInstall() {
+  document.getElementById('install-banner').classList.remove('visible');
+}
+
+// ── Offline detection ─────────────────────────────────────
+function updateOnlineStatus() {
+  document.getElementById('offlineBadge').classList.toggle('visible', !navigator.onLine);
+}
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// ── Service Worker registration ───────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────
+loadStats();
+renderBreakMode();
+render();
+updateRing();
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space')  { e.preventDefault(); toggleTimer(); }
+  if (e.code === 'KeyR')   resetTimer();
+  if (e.key  === '1')      setMode('work');
+  if (e.key  === '2')      setMode('short');
+  if (e.key  === '3')      setMode('long');
+});
 </script>
-
-
 </body>
 </html>
